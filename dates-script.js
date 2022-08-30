@@ -1,42 +1,61 @@
-(function () {
-    var lostFocus = function(item) {
-        var original = item.getName()                
-        var modified = original
+// ==UserScript==
+// @name         WorkflowyDatesUpdaterWholeScript
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  Update dates and trailing spaces
+// @author       Mark E Kendrat
+// @match        https://workflowy.com
+// @match        https://beta.workflowy.com
+// @match        https://dev.workflowy.com
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=workflowy.com
+// @grant        none
+// ==/UserScript==
 
+(() => {
+    'use strict'
+    const script_name = 'WorkflowyDates'
+    const improvedDatesAndSpaces = original => {
+        var improved = original
         // remove all spaces at end of line
-        modified = modified.replace(/ +$/, '')
-
+        improved = improved.replace(/ +$/, '')
         // put 0 in front of single digit date
-        modified = modified.replaceAll(/, (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d), /g, ', $1 0$2, ')
-
+        improved = improved.replaceAll(/, (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d), /g, ', $1 0$2, ')
         // put space in front of single digit hour
-        modified = modified.replaceAll(/ at (\d):(\d\d)(am|pm)/g, ' at  $1:$2$3')
-
-        if (modified != original) {
-            WF.setItemName(item, modified)
-        }
+        improved = improved.replaceAll(/ at (\d):(\d\d)(am|pm)/g, ' at  $1:$2$3')
+        return improved
     }
-
-    var last_focused_item = WF.focusedItem()
-    var is_handler_active = false
-    var handler = function (event) {
-        if (is_handler_active) {
-            // ignored nested event
-            return
-        }
-        is_handler_active = true
+    var listener
+    const saved_wfeventlistener = window.WFEventListener
+    window.WFEventListener = event => {
         try {
-            if (last_focused_item &&
-                    (last_focused_item.getUrl() != WF.focusedItem()?.getUrl() ||
-                    event == 'operation--bulk_create')) {
-                lostFocus(last_focused_item)
-            }
-        } catch (e) {
-            console.log(e)
+            listener?.(event)
+            saved_wfeventlistener?.(event)
+        } catch (exception) {
+            console.log(script_name, exception)
         }
-        last_focused_item = WF.focusedItem()
-        is_handler_active = false
     }
-
-    window.WFEventListener = handler.bind(this)
+    listener = event => {
+        if (event == 'documentReady') {
+            var last_focused_item = window.WF.focusedItem()
+            var is_listener_active = false
+            listener = event => {
+                if (is_listener_active) {
+                    return
+                }
+                is_listener_active = true
+                if (last_focused_item &&
+                    (last_focused_item.getId() != window.WF.focusedItem()?.getId() ||
+                     event == 'operation--bulk_create')) {
+                    var original = last_focused_item.getName()
+                    var improved = improvedDatesAndSpaces(original)
+                    if (improved != original) {
+                        window.WF.setItemName(last_focused_item, improved)
+                        console.log(script_name, 'item updated', improved)
+                    }
+                }
+                last_focused_item = window.WF.focusedItem()
+                is_listener_active = false
+            }
+        }
+    }
 })()
