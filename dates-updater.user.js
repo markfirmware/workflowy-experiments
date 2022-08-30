@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         WorkflowyDatesUpdaterWholeScript
+// @name         WorkflowyDatesUpdater
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.2
 // @description  Update dates and trailing spaces
 // @author       Mark E Kendrat
 // @match        https://workflowy.com
