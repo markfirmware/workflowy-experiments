@@ -9,5 +9,5 @@ It will add a leading 0 to single digit dates, and a leading space to single dig
 In order to not interfere with data entry, the item will not be updated until the editor loses focus on that item.
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
-2. Install this script via this link: [dates-updater.user.js](https://github.com/markfirmware/wprkflowy-experiments/raw/master/dates-updater.user.js)
+2. Install this script via this link: [dates-updater.user.js](https://github.com/markfirmware/workflowy-experiments/raw/master/dates-updater.user.js)
 
