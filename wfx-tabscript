@@ -1,0 +1,93 @@
+(() => {
+    'use strict'
+
+    const script_name = 'wfx tabscript'
+
+    const windowPropertyName = 'isWfxTabscriptInstalled'
+    if (!window[windowPropertyName]) {
+        window[windowPropertyName] = true
+    } else {
+        window.WF.showMessage(`${script_name} is already  installed`, true)
+        return
+    }
+
+    const tab = window.open()
+    const savedWFEventListener = window.WFEventListener
+
+    const channel_name = script_name + '.' + Date.now()
+    const bc = new BroadcastChannel(channel_name)
+    window.WFEventListener = event => {
+        savedWFEventListener?.(event)
+        if (event != 'edit') {
+            const currentItemData = window.WF.currentItem()
+            const currentItem = {}
+            currentItem.id = currentItemData.getId()
+            currentItem.name = currentItemData.getName()
+            currentItem.note = currentItemData.getNote()
+            currentItem.numberOfChildren = currentItemData.getChildren().length
+            const currentSearchQuery = window.WF.currentSearchQuery() || ""
+            bc.postMessage({ messageName: 'event', event, currentItem, currentSearchQuery })
+        }
+    }
+
+    const rxListener = msg => {
+        console.log(channel_name, 'discarded', msg.data)
+    }
+    bc.addEventListener('message', rxListener)
+
+    const html =
+`
+    <html>
+      <title>${script_name}</title>
+      <head>
+        <link rel="stylesheet" href="https://unpkg.com/bulma">
+        <script type="importmap">
+          {
+            "imports": {
+              "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js"
+            }
+          }
+        </script>
+      </head>
+      <body class="is-family-monospace is-size-7 has-background-black has-text-white">
+        <div id="app">
+          <div v-for="msg in log">{{ fmt(msg) }}</div>
+        </div>
+        <script type="module">
+          import { createApp } from 'vue'
+          const script_name = "${script_name}"
+          const channel_name = "${channel_name}"
+          const app = createApp({
+            data: function() {
+              return { log: [] }
+            },
+            methods: {
+              add: function(message) {
+                this.log = [message, ...this.log]
+              },
+              post: function(messageName, more) {
+                bc.postMessage({ messageName, ...more })
+              },
+              fmt: function(msg) {
+                const { messageName, ...msg2 } = msg
+                return messageName + ' ' + JSON.stringify(msg2)
+                  .replace(/^{(.*)}$/, '$1')
+                  .replace(/"([a-z0-9-_]+)"/gi, '$1')
+                  .replace(/ /g, '\u00a0')
+              }
+            }
+          }).mount("#app")
+          const bc = new BroadcastChannel(channel_name)
+          bc.addEventListener('message', m => app.add(m.data))
+        </script>
+      </body>
+    </html>
+`
+
+    const d = tab.document
+    d.open()
+    d.write(html)
+    d.close()
+
+    console.log(script_name + ': running')
+})()
