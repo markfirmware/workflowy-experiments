@@ -1,0 +1,163 @@
+(() => {
+    'use strict'
+    const windowPropertyName = 'signagedemo_20221120'
+    const trap = f => {
+        return (...args) => {
+            try {
+                return f(...args)
+            } catch (e) {
+                console.log('trap', windowPropertyName, e)
+            }
+        }
+    }
+    trap(() => {
+        const installer = (() => {
+            if (!window[windowPropertyName]) {
+                window[windowPropertyName] = {}
+            }
+            const windowProperty = window[windowPropertyName]
+            const disable = () => {
+                windowProperty.disableFn?.()
+                windowProperty.disableFn = null
+            }
+            const onDisable = fn => {
+                windowProperty.disableFn = fn
+            }
+            return { disable, onDisable, windowProperty }
+        })()
+
+        installer.disable()
+
+        const itemToData = item => {
+            if (item) {
+                const data = {}
+                data.id = item.getId()
+                data.name = item.getName()
+                data.childrenIds = item.getChildren().map(c => c.getId())
+                return data
+            } else {
+                return null
+            }
+        }
+
+        const wfState = () => {
+            const currentItem = window.WF.currentItem()
+            return {
+                currentItem: itemToData(currentItem),
+                focusedItem: itemToData(window.WF.focusedItem()),
+                currentSearchQuery: window.WF.currentSearchQuery() || ""
+            }
+        }
+
+        const post = (messageName, more) => {
+            bc.postMessage({ messageName, ...more })
+        }
+        const channelName = installer.scriptId + '.' + Date.now()
+        const bc = new BroadcastChannel(channelName)
+        const rxListener = trap(msg => {
+            const data = msg.data
+            if (data.messageName == 'tabReady') {
+                post('currentState', wfState())
+            } else if (data.messageName == 'getItems') {
+                post('getItemsResponse', { items: data.ids.map(id => itemToData(window.WF.getItemById(id))) })
+            } else {
+                console.log(channelName, 'discarded', data)
+            }
+        })
+        bc.addEventListener('message', rxListener)
+
+        var wfEventListener = event => {
+            if (event != 'edit') {
+                post('wfEvent', { event, ...wfState() })
+            }
+        }
+        const savedWFEventListener = window.WFEventListener
+        window.WFEventListener = trap(event => {
+            savedWFEventListener?.(event)
+            wfEventListener?.(event)
+        })
+
+    const html =
+`
+    <html>
+      <title>${windowPropertyName}</title>
+      <head>
+        <link rel="stylesheet" href="https://unpkg.com/bulma">
+        <script type="importmap">{ "imports": { "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js" } }</script>
+      </head>
+      <body class="is-family-monospace is-size-7 has-background-black has-text-white">
+        <div id="app">
+          <div class="is-size-4" v-html="getItemNameWithLinksFixed(wfState?.currentItem.childrenIds[slideIndex]) || ''"></div>
+        </div>
+        <script type="module">
+          import { createApp } from 'vue'
+          window.opener.focus()
+          const windowPropertyName = "${windowPropertyName}"
+          const channelName = "${channelName}"
+          const app = createApp({
+            mounted: function() {
+              setInterval(() => {
+                const next = this.slideIndex + 1
+                if (this.wfState && next < this.wfState.currentItem.childrenIds.length) {
+                  this.slideIndex = next
+                } else {
+                  this.slideIndex = 0
+                }
+              }, 1000)
+            },
+            data: function() {
+              return { wfState: null, items: new Map(), slideIndex: 0 }
+            },
+            methods: {
+              rx: function(message) {
+                if (message.messageName == 'currentState' || message.messageName == 'wfEvent') {
+                  this.wfState = message
+                  this.retainItem(this.wfState.currentItem)
+                  if (this.wfState.focusedItem) {
+                    this.retainItem(this.wfState.focusedItem)
+                  }
+                  this.post('getItems', { 'ids': this.wfState.currentItem.childrenIds.filter(id => !this.items.has(id)) })
+                } else if (message.messageName == 'getItemsResponse') {
+                  for (const item of message.items) {
+                    this.retainItem(item)
+                  }
+                }
+              },
+              retainItem: function(item) {
+                this.items.set(item.id, item)
+              },
+              getItemNameWithLinksFixed: function(id) {
+                return id && this.items.has(id) ? this.items.get(id).name.replaceAll(/<a /g, '<a target="_blank" ') : ''
+              },
+              post: function(messageName, more) {
+                bc.postMessage({ messageName, ...more })
+              },
+            }
+          }).mount("#app")
+          const bc = new BroadcastChannel(channelName)
+          bc.addEventListener('message', m => app.rx(m.data))
+          app.post('tabReady')
+        </script>
+      </body>
+    </html>
+`
+
+        const i = installer.windowProperty
+        if (!i.tab || i.tab.closed) {
+            i.tab = window.open()
+            window.addEventListener('beforeunload', trap(() => i.tab.close()))
+        }
+        const d = i.tab.document
+        d.open()
+        d.write(html)
+        d.close()
+        i.tab.focus()
+
+        installer.onDisable(() => {
+            wfEventListener = null
+            bc.removeEventListener('message', rxListener)
+        })
+
+        console.log(installer.windowPropertyName + ': running')
+    })()
+})()
